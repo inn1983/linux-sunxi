@@ -132,7 +132,7 @@ struct tuner {
 	bool                standby;	/* Standby mode */
 
 	unsigned int        type; /* chip type id */
-	unsigned int        config;
+	unsigned int		config;
 	const char          *name;
 };
 
@@ -218,16 +218,6 @@ static void fe_standby(struct dvb_frontend *fe)
 		fe_tuner_ops->sleep(fe);
 }
 
-static int fe_has_signal(struct dvb_frontend *fe)
-{
-	u16 strength = 0;
-
-	if (fe->ops.tuner_ops.get_rf_strength)
-		fe->ops.tuner_ops.get_rf_strength(fe, &strength);
-
-	return strength;
-}
-
 static int fe_set_config(struct dvb_frontend *fe, void *priv_cfg)
 {
 	struct dvb_tuner_ops *fe_tuner_ops = &fe->ops.tuner_ops;
@@ -243,10 +233,9 @@ static int fe_set_config(struct dvb_frontend *fe, void *priv_cfg)
 
 static void tuner_status(struct dvb_frontend *fe);
 
-static struct analog_demod_ops tuner_analog_ops = {
+static const struct analog_demod_ops tuner_analog_ops = {
 	.set_params     = fe_set_params,
 	.standby        = fe_standby,
-	.has_signal     = fe_has_signal,
 	.set_config     = fe_set_config,
 	.tuner_status   = tuner_status
 };
@@ -307,7 +296,7 @@ static void set_type(struct i2c_client *c, unsigned int type,
 	{
 		struct tda829x_config cfg = {
 			.lna_cfg        = t->config,
-		};
+			};
 		if (!dvb_attach(tda829x_attach, &t->fe, t->i2c->adapter,
 				t->i2c->addr, &cfg))
 			goto attach_failed;
@@ -441,6 +430,11 @@ static void set_type(struct i2c_client *c, unsigned int type,
 		t->fe.analog_demod_priv = t;
 		memcpy(analog_ops, &tuner_analog_ops,
 		       sizeof(struct analog_demod_ops));
+
+		if (fe_tuner_ops->get_rf_strength)
+			analog_ops->has_signal = fe_tuner_ops->get_rf_strength;
+		if (fe_tuner_ops->get_afc)
+			analog_ops->get_afc = fe_tuner_ops->get_afc;
 
 	} else {
 		t->name = analog_ops->info.name;
@@ -1002,6 +996,11 @@ static void set_radio_freq(struct i2c_client *c, unsigned int freq)
 	t->standby = false;
 
 	analog_ops->set_params(&t->fe, &params);
+	/*
+	 * The tuner driver might decide to change the audmode if it only
+	 * supports stereo, so update t->audmode.
+	 */
+	t->audmode = params.audmode;
 }
 
 /*
@@ -1057,9 +1056,12 @@ static void tuner_status(struct dvb_frontend *fe)
 		if (tuner_status & TUNER_STATUS_STEREO)
 			tuner_info("Stereo:          yes\n");
 	}
-	if (analog_ops->has_signal)
-		tuner_info("Signal strength: %d\n",
-			   analog_ops->has_signal(fe));
+	if (analog_ops->has_signal) {
+		u16 signal;
+
+		if (!analog_ops->has_signal(fe, &signal))
+			tuner_info("Signal strength: %hu\n", signal);
+	}
 }
 
 /*
@@ -1177,8 +1179,14 @@ static int tuner_g_tuner(struct v4l2_subdev *sd, struct v4l2_tuner *vt)
 	if (check_mode(t, vt->type) == -EINVAL)
 		return 0;
 	if (vt->type == t->mode && analog_ops->get_afc)
-		vt->afc = analog_ops->get_afc(&t->fe);
-	if (t->mode != V4L2_TUNER_RADIO) {
+		analog_ops->get_afc(&t->fe, &vt->afc);
+	if (vt->type == t->mode && analog_ops->has_signal) {
+		u16 signal = (u16)vt->signal;
+
+		if (!analog_ops->has_signal(&t->fe, &signal))
+			vt->signal = signal;
+	}
+	if (vt->type != V4L2_TUNER_RADIO) {
 		vt->capability |= V4L2_TUNER_CAP_NORM;
 		vt->rangelow = tv_range[0] * 16;
 		vt->rangehigh = tv_range[1] * 16;
@@ -1197,8 +1205,6 @@ static int tuner_g_tuner(struct v4l2_subdev *sd, struct v4l2_tuner *vt)
 				V4L2_TUNER_SUB_STEREO :
 				V4L2_TUNER_SUB_MONO;
 		}
-		if (analog_ops->has_signal)
-			vt->signal = analog_ops->has_signal(&t->fe);
 		vt->audmode = t->audmode;
 	}
 	vt->capability |= V4L2_TUNER_CAP_LOW | V4L2_TUNER_CAP_STEREO;
@@ -1224,8 +1230,18 @@ static int tuner_s_tuner(struct v4l2_subdev *sd, struct v4l2_tuner *vt)
 	if (set_mode(t, vt->type))
 		return 0;
 
-	if (t->mode == V4L2_TUNER_RADIO)
+	if (t->mode == V4L2_TUNER_RADIO) {
 		t->audmode = vt->audmode;
+		/*
+		 * For radio audmode can only be mono or stereo. Map any
+		 * other values to stereo. The actual tuner driver that is
+		 * called in set_radio_freq can decide to limit the audmode to
+		 * mono if only mono is supported.
+		 */
+		if (t->audmode != V4L2_TUNER_MODE_MONO &&
+		    t->audmode != V4L2_TUNER_MODE_STEREO)
+			t->audmode = V4L2_TUNER_MODE_STEREO;
+	}
 	set_freq(t, 0);
 
 	return 0;
@@ -1241,8 +1257,10 @@ static int tuner_log_status(struct v4l2_subdev *sd)
 	return 0;
 }
 
-static int tuner_suspend(struct i2c_client *c, pm_message_t state)
+#ifdef CONFIG_PM_SLEEP
+static int tuner_suspend(struct device *dev)
 {
+	struct i2c_client *c = to_i2c_client(dev);
 	struct tuner *t = to_tuner(i2c_get_clientdata(c));
 	struct analog_demod_ops *analog_ops = &t->fe.ops.analog_ops;
 
@@ -1254,8 +1272,9 @@ static int tuner_suspend(struct i2c_client *c, pm_message_t state)
 	return 0;
 }
 
-static int tuner_resume(struct i2c_client *c)
+static int tuner_resume(struct device *dev)
 {
+	struct i2c_client *c = to_i2c_client(dev);
 	struct tuner *t = to_tuner(i2c_get_clientdata(c));
 
 	tuner_dbg("resume\n");
@@ -1266,6 +1285,7 @@ static int tuner_resume(struct i2c_client *c)
 
 	return 0;
 }
+#endif
 
 static int tuner_command(struct i2c_client *client, unsigned cmd, void *arg)
 {
@@ -1310,6 +1330,10 @@ static const struct v4l2_subdev_ops tuner_ops = {
  * I2C structs and module init functions
  */
 
+static const struct dev_pm_ops tuner_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(tuner_suspend, tuner_resume)
+};
+
 static const struct i2c_device_id tuner_id[] = {
 	{ "tuner", }, /* autodetect */
 	{ }
@@ -1320,12 +1344,11 @@ static struct i2c_driver tuner_driver = {
 	.driver = {
 		.owner	= THIS_MODULE,
 		.name	= "tuner",
+		.pm	= &tuner_pm_ops,
 	},
 	.probe		= tuner_probe,
 	.remove		= tuner_remove,
 	.command	= tuner_command,
-	.suspend	= tuner_suspend,
-	.resume		= tuner_resume,
 	.id_table	= tuner_id,
 };
 

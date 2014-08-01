@@ -2403,7 +2403,7 @@ static unsigned int dvb_frontend_poll(struct file *file, struct poll_table_struc
 	struct dvb_frontend *fe = dvbdev->priv;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 
-	dev_dbg_ratelimited(fe->dvb->device, "%s:\n", __func__);
+	//dev_dbg_ratelimited(fe->dvb->device, "%s:\n", __func__);
 
 	poll_wait (file, &fepriv->events.wait_queue, wait);
 

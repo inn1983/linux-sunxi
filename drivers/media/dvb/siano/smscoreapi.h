@@ -1182,11 +1182,11 @@ int smscore_led_state(struct smscore_device_t *core, int led);
 #define sms_log(fmt, arg...) sms_printk(KERN_INFO, fmt, ##arg)
 #define sms_err(fmt, arg...) \
 	sms_printk(KERN_ERR, "line: %d: " fmt, __LINE__, ##arg)
-#define sms_warn(fmt, arg...)  sms_printk(KERN_WARNING, "line: %d: " fmt, __LINE__, ##arg)
+#define sms_warn(fmt, arg...)  sms_printk(KERN_WARNING, fmt, ##arg)
 #define sms_info(fmt, arg...) \
-	sms_printk(KERN_INFO, "line: %d: " fmt, __LINE__, ##arg)
+	dprintk(KERN_INFO, DBG_INFO, fmt, ##arg)
 #define sms_debug(fmt, arg...) \
-	sms_printk(KERN_DEBUG, "line: %d: " fmt, __LINE__, ##arg)
+	dprintk(KERN_DEBUG, DBG_ADV, fmt, ##arg)
 
 
 #endif /* __SMS_CORE_API_H__ */
