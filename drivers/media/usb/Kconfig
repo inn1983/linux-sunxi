@@ -1,0 +1,17 @@
+if USB && MEDIA_SUPPORT
+
+menuconfig MEDIA_USB_SUPPORT
+	bool "Media USB Adapters"
+	help
+	  Enable media drivers for USB bus.
+	  If you have such devices, say Y.
+
+if MEDIA_USB_SUPPORT
+
+if MEDIA_CAMERA_SUPPORT
+	comment "usb cap."
+source "drivers/media/usb/usbtv/Kconfig"
+endif
+
+endif #MEDIA_USB_SUPPORT
+endif #USB
