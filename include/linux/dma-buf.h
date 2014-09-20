@@ -97,6 +97,9 @@ struct dma_buf_ops {
 	void *(*kmap)(struct dma_buf *, unsigned long);
 	void (*kunmap)(struct dma_buf *, unsigned long, void *);
 
+	void *(*vmap)(struct dma_buf *);
+	void (*vunmap)(struct dma_buf *, void *vaddr);
+
 	int (*mmap)(struct dma_buf *, struct vm_area_struct *vma);
 };
 
@@ -173,6 +176,9 @@ void *dma_buf_kmap_atomic(struct dma_buf *, unsigned long);
 void dma_buf_kunmap_atomic(struct dma_buf *, unsigned long, void *);
 void *dma_buf_kmap(struct dma_buf *, unsigned long);
 void dma_buf_kunmap(struct dma_buf *, unsigned long, void *);
+
+void *dma_buf_vmap(struct dma_buf *);
+void dma_buf_vunmap(struct dma_buf *, void *vaddr);
 
 int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 		 unsigned long);
@@ -255,6 +261,14 @@ static inline void *dma_buf_kmap(struct dma_buf *dmabuf, unsigned long pnum)
 
 static inline void dma_buf_kunmap(struct dma_buf *dmabuf,
 				  unsigned long pnum, void *vaddr)
+{
+}
+
+static inline void *dma_buf_vmap(struct dma_buf *)
+{
+}
+
+static inline void dma_buf_vunmap(struct dma_buf *, void *vaddr);
 {
 }
 
