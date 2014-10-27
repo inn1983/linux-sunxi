@@ -1242,3 +1242,14 @@ menuconfig VIDEO_CSI_SUN4I
 if VIDEO_CSI_SUN4I
 source "drivers/media/video/sun4i_csi/Kconfig"	   	  
 endif
+
+config VIDEO_SUN7I_TVD
+       tristate "TV decoder driver for sun7i"
+       depends on ARCH_SUN7I
+       default m
+       help
+         TVD driver for sun7i
+
+if VIDEO_SUN7I_TVD
+source "drivers/media/video/sun7i_tvd/Kconfig"
+endif
