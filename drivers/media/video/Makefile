@@ -221,4 +221,5 @@ endif
 obj-$(CONFIG_CSI0_SUN4I) += sun4i_csi/csi0/
 obj-$(CONFIG_CSI1_SUN4I) += sun4i_csi/csi1/
 
-obj-$(CONFIG_VIDEO_SUN7I_TVD) += sun7i_tvd/
+#obj-$(CONFIG_VIDEO_SUN7I_TVD) += sun7i_tvd/
+obj-$(CONFIG_TVD) +=tvd/
