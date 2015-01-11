@@ -546,6 +546,9 @@ static long uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	struct uvc_streaming *stream = handle->stream;
 	long ret = 0;
 
+	uvc_trace(UVC_TRACE_IOCTL, "cmd = 0x%08x\n", cmd);
+	uvc_trace(UVC_TRACE_IOCTL, "VIDIOC_S_CTRL = 0x%08x\n", VIDIOC_S_CTRL);
+
 	switch (cmd) {
 	/* Query capabilities */
 	case VIDIOC_QUERYCAP:
@@ -604,11 +607,14 @@ static long uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 			return ret;
 
 		ret = uvc_ctrl_set(chain, &xctrl);
+		uvc_trace(UVC_TRACE_IOCTL, "VIDIOC_S_CTRL ioctl is 0x%08x\n", cmd);
+		uvc_trace(UVC_TRACE_IOCTL, "VIDIOC_S_CTRL ret is %ld\n", ret);
 		if (ret < 0) {
 			uvc_ctrl_rollback(chain);
 			return ret;
 		}
 		ret = uvc_ctrl_commit(chain);
+		uvc_trace(UVC_TRACE_IOCTL, "VIDIOC_S_CTRL ret is %ld\n", ret);
 		if (ret == 0)
 			ctrl->value = xctrl.value;
 		break;

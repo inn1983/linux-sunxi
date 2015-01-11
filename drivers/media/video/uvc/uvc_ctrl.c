@@ -1206,6 +1206,7 @@ int uvc_ctrl_set(struct uvc_video_chain *chain,
 	/* Clamp out of range values. */
 	switch (mapping->v4l2_type) {
 	case V4L2_CTRL_TYPE_INTEGER:
+		uvc_trace(UVC_TRACE_CONTROL,"V4L2_CTRL_TYPE_INTEGE.\n");
 		if (!ctrl->cached) {
 			ret = uvc_ctrl_populate_cache(chain, ctrl);
 			if (ret < 0)
@@ -1227,11 +1228,15 @@ int uvc_ctrl_set(struct uvc_video_chain *chain,
 		break;
 
 	case V4L2_CTRL_TYPE_BOOLEAN:
+		uvc_trace(UVC_TRACE_CONTROL,"V4L2_CTRL_TYPE_BOOLEAN.\n");
 		xctrl->value = clamp(xctrl->value, 0, 1);
 		value = xctrl->value;
 		break;
 
 	case V4L2_CTRL_TYPE_MENU:
+		uvc_trace(UVC_TRACE_CONTROL,"V4L2_CTRL_TYPE_MENU.\n");
+		uvc_trace(UVC_TRACE_CONTROL,"xctrl->value=%d, .\n", xctrl->value);
+		uvc_trace(UVC_TRACE_CONTROL,"mapping->menu_count=%d, .\n", mapping->menu_count);
 		if (xctrl->value < 0 || xctrl->value >= mapping->menu_count)
 			return -ERANGE;
 		value = mapping->menu_info[xctrl->value].value;
