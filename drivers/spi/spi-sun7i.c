@@ -1436,7 +1436,7 @@ static int sun7i_spi_hw_exit(struct sun7i_spi *aw_spi)
     return 0;
 }
 
-static int __init sun7i_spi_probe(struct platform_device *pdev)
+static int sun7i_spi_probe(struct platform_device *pdev)
 {
     struct resource *mem_res, *dma_res_rx, *dma_res_tx;
     struct sun7i_spi *aw_spi;
