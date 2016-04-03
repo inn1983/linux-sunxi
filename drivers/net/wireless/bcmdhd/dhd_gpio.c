@@ -25,23 +25,37 @@
 
 #include <osl.h>
 
-#include <mach/gpio.h>
+#include <linux/gpio.h>
+//#include <mach/sys_config.h>
 #include <plat/sys_config.h>
 
 #ifdef CUSTOMER_HW
 
-extern int __gpio_to_irq(unsigned gpio);
-extern int gpio_direction_input(unsigned gpio);
-extern int gpio_request(unsigned gpio, const char *label);
-extern void gpio_free(unsigned gpio);
-
 #ifdef CUSTOMER_OOB
-extern int wl_host_wake_irqno;
 int bcm_wlan_get_oob_irq(void)
 {
-	return wl_host_wake_irqno;
+	int host_oob_irq = 0;
+	int ret = 0;
+	int wl_host_wake = 0;
+	//script_item_u val ;
+	//script_item_value_type_e type;
+	
+	printk("bcm_wlan_get_oob_irq enter.\n");
+	
+	//type = script_get_item("wifi_para", "ap6xxx_wl_host_wake", &val);
+	//if (SCIRPT_ITEM_VALUE_TYPE_PIO!=type) 
+	//	printk("get bcmdhd ap6xxx_wl_host_wake gpio failed\n");
+	//else
+	//	wl_host_wake = val.gpio.gpio;
+	wl_host_wake = gpio_request_ex("wifi_para", "ap6xxx_wl_host_wake");
+	host_oob_irq = gpio_to_irq(wl_host_wake);
+	if (IS_ERR_VALUE(host_oob_irq)) {
+		printk("map gpio [%d] to virq failed, errno = %d\n",wl_host_wake, host_oob_irq);
+		return 0;
+	}
+	printk("gpio [%d] map to virq [%d] ok\n",wl_host_wake, host_oob_irq);
+
+	return host_oob_irq;
 }
 #endif
-
-
 #endif /* CUSTOMER_HW */

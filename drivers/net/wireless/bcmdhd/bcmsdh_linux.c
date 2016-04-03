@@ -1,27 +1,9 @@
 /*
  * SDIO access interface for drivers - linux specific (pci only)
  *
- * Copyright (C) 1999-2012, Broadcom Corporation
- * 
- *      Unless you and Broadcom execute a separate written software license
- * agreement governing use of this software, this software is licensed to you
- * under the terms of the GNU General Public License version 2 (the "GPL"),
- * available at http://www.broadcom.com/licenses/GPLv2.php, with the
- * following added to such license:
- * 
- *      As a special exception, the copyright holders of this software give you
- * permission to link this software with independent modules, and to copy and
- * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
- * modifications of the software.
- * 
- *      Notwithstanding the above, under no circumstances may you combine this
- * software in any way with any other Broadcom software provided under a license
- * other than the GPL, without Broadcom's express prior written consent.
+ * $Copyright Open Broadcom Corporation$
  *
- * $Id: bcmsdh_linux.c 373359 2012-12-07 06:36:37Z $
+ * $Id: bcmsdh_linux.c 414953 2013-07-26 17:36:27Z $
  */
 
 /**
@@ -40,8 +22,6 @@
 #include <pcicfg.h>
 #include <bcmdefs.h>
 #include <bcmdevs.h>
-#include <linux/gpio.h>
-#include <linux/interrupt.h>
 
 #if defined(OOB_INTR_ONLY)
 #include <linux/irq.h>
@@ -49,10 +29,7 @@ extern void dhdsdio_isr(void * args);
 #include <bcmutils.h>
 #include <dngl_stats.h>
 #include <dhd.h>
-#include <mach/gpio.h>
-#include <plat/sys_config.h>
 #endif 
-
 
 /**
  * SDIO Host Controller info
@@ -172,7 +149,7 @@ int bcmsdh_probe(struct device *dev)
 	pdev = to_platform_device(dev);
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	irq = platform_get_irq(pdev, 0);
-	if (!r || irq == NO_IRQ)
+	if (!r || irq < 0)
 		return -ENXIO;
 #endif 
 
@@ -186,13 +163,9 @@ int bcmsdh_probe(struct device *dev)
 
 	/* Get customer specific OOB IRQ parametres: IRQ number as IRQ type */
 	irq = dhd_customer_oob_irq_map(&irq_flags);
-#if	defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI)
-	/* Do not disable this IRQ during suspend */
-	irq_flags |= IRQF_NO_SUSPEND;
-#endif /* defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) */
 	if  (irq < 0) {
 		SDLX_MSG(("%s: Host irq is not defined\n", __FUNCTION__));
-		return 1;
+		goto err;
 	}
 #endif 
 	/* allocate SDIO Host Controller state info */
@@ -413,6 +386,10 @@ bcmsdh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* match this pci device with what we support */
 	/* we can't solely rely on this to believe it is our SDIO Host Controller! */
 	if (!bcmsdh_chipmatch(pdev->vendor, pdev->device)) {
+		if (pdev->vendor == VENDOR_BROADCOM) {
+			SDLX_MSG(("%s: Unknown Broadcom device (vendor: %#x, device: %#x).\n",
+				__FUNCTION__, pdev->vendor, pdev->device));
+		}
 		return -ENODEV;
 	}
 
@@ -544,7 +521,7 @@ bcmsdh_register(bcmsdh_driver_t *driver)
 	drvinfo = *driver;
 
 #if defined(BCMPLATFORM_BUS)
-	SDLX_MSG(("Linux Kernel SDIO/MMC Driver\n"));
+	SDLX_MSG(("%s: Linux Kernel SDIO/MMC Driver\n", __FUNCTION__));
 	error = sdio_function_init();
 	return error;
 #endif /* defined(BCMPLATFORM_BUS) */
@@ -584,7 +561,7 @@ bcmsdh_unregister(void)
 
 int bcmsdh_set_drvdata(void * dhdp)
 {
-	SDLX_MSG(("%s Enter \n", __FUNCTION__));
+	SDLX_MSG(("%s: Enter\n", __FUNCTION__));
 
 	dev_set_drvdata(sdhcinfo->dev, dhdp);
 
@@ -592,8 +569,7 @@ int bcmsdh_set_drvdata(void * dhdp)
 }
 
 #if defined(OOB_INTR_ONLY)
-#define CONFIG_ARCH_SUN6I_BCMDHD 1
-
+#define CONFIG_ARCH_SUNXI  1
 void bcmsdh_oob_intr_set(bool enable)
 {
 	static bool curstate = 1;
@@ -601,15 +577,12 @@ void bcmsdh_oob_intr_set(bool enable)
 
 	spin_lock_irqsave(&sdhcinfo->irq_lock, flags);
 	if (curstate != enable) {
-		if(enable) {
-		    enable_irq(sdhcinfo->oob_irq);
-		}
-		else {
-		    disable_irq_nosync(sdhcinfo->oob_irq);
-		}
+		if (enable)
+			enable_irq(sdhcinfo->oob_irq);
+		else
+			disable_irq_nosync(sdhcinfo->oob_irq);
 		curstate = enable;
 	}
-	
 	spin_unlock_irqrestore(&sdhcinfo->irq_lock, flags);
 }
 
@@ -622,7 +595,8 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 	bcmsdh_oob_intr_set(0);
 
 	if (dhdp == NULL) {
-		SDLX_MSG(("Out of band GPIO interrupt fired way too early\n"));
+		SDLX_MSG(("%s: Out of band GPIO interrupt fired way too early\n",
+			__FUNCTION__));
 		return IRQ_HANDLED;
 	}
 
@@ -631,41 +605,44 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-extern int wl_host_wake_irqno;
-irqreturn_t bcmdhd_gpio_irq_handler(int irq, void *dev)
-{
-        wlan_oob_irq(0, NULL);
-        return IRQ_HANDLED;
-}
-
 int bcmsdh_register_oob_intr(void * dhdp)
 {
 	int error = 0;
-	int ret;
-	SDLX_MSG(("%s Enter \n", __FUNCTION__));
+
+	SDLX_MSG(("%s: Enter \n", __FUNCTION__));
 
 	/* IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL | IORESOURCE_IRQ_SHAREABLE; */
+
 	dev_set_drvdata(sdhcinfo->dev, dhdp);
 
 	if (!sdhcinfo->oob_irq_registered) {
-		SDLX_MSG(("%s IRQ=%d Type=%X \n", __FUNCTION__,
+		SDLX_MSG(("%s: IRQ=%d Type=%X \n", __FUNCTION__,
 			(int)sdhcinfo->oob_irq, (int)sdhcinfo->oob_flags));
 
-		ret = request_irq(wl_host_wake_irqno, bcmdhd_gpio_irq_handler, IRQF_DISABLED| IRQF_SHARED| IRQF_TRIGGER_HIGH, "bcmdhd_gpio_irq", (void *)&wl_host_wake_irqno);
-		if (ret) {
-                        pr_err("bcmdhd: request irq%d failed\n", wl_host_wake_irqno);
-			return -1;
-                }
+#ifndef BCMDHD_OOB_LOW_LEVEL_TRIGGER
+	error = devm_request_irq(sdhcinfo->dev,sdhcinfo->oob_irq, wlan_oob_irq, IRQF_TRIGGER_HIGH, "bcmsdh", NULL);
+#else
+	error = devm_request_irq(sdhcinfo->dev,sdhcinfo->oob_irq, wlan_oob_irq, IRQF_TRIGGER_LOW, "bcmsdh", NULL);
+#endif
+  if (IS_ERR_VALUE(error)) {
+    SDLX_MSG(("Failed to get gpio irq for wifi wakeup ap\n"));
+  }
 
-#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUN6I_BCMDHD)
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUNXI)
+		printk("\nbcmdhd wakeup %d\n", device_may_wakeup(sdhcinfo->dev));
 		if (device_may_wakeup(sdhcinfo->dev)) {
 #endif
+#if defined(DISABLE_WOWLAN)
+			SDLX_MSG(("%s: disable_irq_wake \n", __FUNCTION__));
+			error = disable_irq_wake(sdhcinfo->oob_irq);
+#else
 			error = enable_irq_wake(sdhcinfo->oob_irq);
-#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUN6I_BCMDHD)
+#endif
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUNXI)
 		}
 #endif
 		if (error)
-			SDLX_MSG(("%s enable_irq_wake error=%d \n", __FUNCTION__, error));
+			SDLX_MSG(("%s: enable_irq_wake error=%d \n", __FUNCTION__, error));
 		sdhcinfo->oob_irq_registered = TRUE;
 		sdhcinfo->oob_irq_enable_flag = TRUE;
 	}
@@ -676,22 +653,24 @@ int bcmsdh_register_oob_intr(void * dhdp)
 void bcmsdh_set_irq(int flag)
 {
 	if (sdhcinfo->oob_irq_registered && sdhcinfo->oob_irq_enable_flag != flag) {
-		SDLX_MSG(("%s Flag = %d\n", __FUNCTION__, flag));
+		SDLX_MSG(("%s: Flag = %d\n", __FUNCTION__, flag));
 		sdhcinfo->oob_irq_enable_flag = flag;
 		if (flag) {
 			enable_irq(sdhcinfo->oob_irq);
-
-#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUN6I_BCMDHD)
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUNXI)
 			if (device_may_wakeup(sdhcinfo->dev))
 #endif
+#if defined(DISABLE_WOWLAN)
+				SDLX_MSG(("%s: disable_irq_wake \n", __FUNCTION__));
+				disable_irq_wake(sdhcinfo->oob_irq);
+#else
 				enable_irq_wake(sdhcinfo->oob_irq);
+#endif
 		} else {
-#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUN6I_BCMDHD)
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI) || defined(CONFIG_ARCH_SUNXI)
 			if (device_may_wakeup(sdhcinfo->dev))
 #endif
 				disable_irq_wake(sdhcinfo->oob_irq);
-
-
 			disable_irq(sdhcinfo->oob_irq);
 		}
 	}
@@ -702,14 +681,18 @@ void bcmsdh_unregister_oob_intr(void)
 	SDLX_MSG(("%s: Enter\n", __FUNCTION__));
 
 	if (sdhcinfo->oob_irq_registered == TRUE) {
-
-		if(0 != wl_host_wake_irqno) {
-			pr_info("bcmdhd: free_irq %d\n", wl_host_wake_irqno);
-			free_irq(wl_host_wake_irqno, &wl_host_wake_irqno);
-		}
-
+		bcmsdh_set_irq(FALSE);
+        devm_free_irq(sdhcinfo->dev,sdhcinfo->oob_irq,NULL);
 		sdhcinfo->oob_irq_registered = FALSE;
 	}
+}
+
+bool bcmsdh_is_oob_intr_registered(void)
+{
+	if (sdhcinfo)
+		return sdhcinfo->oob_irq_registered;
+	else
+		return FALSE;
 }
 #endif 
 
@@ -748,6 +731,10 @@ module_param(sd_f2_blocksize, int, 0);
 #ifdef BCMSDIOH_STD
 extern int sd_uhsimode;
 module_param(sd_uhsimode, int, 0);
+extern uint sd_tuning_period;
+module_param(sd_tuning_period, uint, 0);
+extern int sd_delay_value;
+module_param(sd_delay_value, uint, 0);
 #endif
 
 #ifdef BCMSDIOH_TXGLOM

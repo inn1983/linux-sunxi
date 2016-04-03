@@ -109,10 +109,14 @@ fw-shipped-$(CONFIG_USB_EMI62) += emi62/loader.fw emi62/bitstream.fw \
 fw-shipped-$(CONFIG_USB_KAWETH) += kaweth/new_code.bin kaweth/trigger_code.bin \
 				   kaweth/new_code_fix.bin \
 				   kaweth/trigger_code_fix.bin
-fw-shipped-$(CONFIG_BCMDHD) += ap6210/bcm20710a1.hcd ap6210/fw_bcm40181a2.bin \
-			       ap6210/fw_bcm40181a2_apsta.bin \
-			       ap6210/fw_bcm40181a2_p2p.bin \
-			       ap6210/nvram_ap6210.txt
+fw-shipped-$(CONFIG_BCMDHD) += ap6330/bcm40183b2.hcd \
+                                ap6330/bd_addr.txt  \
+                                ap6330/device-bcm.mk  \
+                                ap6330/fw_bcm40183b2_ag_apsta.bin  \
+                                ap6330/fw_bcm40183b2_ag.bin  \
+                                ap6330/fw_bcm40183b2_ag_p2p.bin  \
+                                ap6330/nvram_ap6330.txt
+
 fw-shipped-$(CONFIG_RTXX7X_SW) += rtxx7x/RT2870STA.dat rtxx7x/RT2870STACard.dat
 ifdef CONFIG_FIRMWARE_IN_KERNEL
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_MPR) += keyspan/mpr.fw
